@@ -135,19 +135,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // CLEAR INVENTORY
   clearInventoryBtn.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to clear all inventory?')) return;
-    try {
-      const res = await fetch(workerURL, {
-        method: 'DELETE',
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-        cache: 'no-store'
-      });
-      showToast(await res.text());
-      fetchInventory();
-    } catch (e) {
-      showToast(e.message, true);
-    }
-  });
+  if (!confirm('Are you sure you want to clear all inventory?')) return;
+
+  const token = localStorage.getItem('token');
+  try {
+    // 1️⃣ Tell the Worker to clear the KV
+    const res = await fetch(workerURL, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const msg = await res.text();
+    showToast(msg);
+
+    // 2️⃣ Immediately clear the table in the UI
+    const tbody    = document.querySelector('#inventoryTable tbody');
+    const colCount = document.querySelectorAll('#inventoryTable thead th').length;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="${colCount}" class="empty">
+          No inventory data available.
+        </td>
+      </tr>`;
+
+    // 3️⃣ (Optional) refresh from the server after a small delay:
+    setTimeout(() => fetchInventory(), 500);
+
+  } catch (e) {
+    showToast(e.message, true);
+  }
+});
+
 
   // MANUAL CARD LOGIC
   manualAction.addEventListener('change', () => {
@@ -242,20 +259,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // FETCH & RENDER
   async function fetchInventory(q = '') {
-    try {
-      const url = workerURL + (q ? '?q=' + encodeURIComponent(q) : '');
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') },
-        cache: 'no-store'
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const items = await res.json();
-      renderTable(items);
-    } catch (e) {
-      showToast(e.message, true);
-    }
+  const token = localStorage.getItem('token');
+  const url   = workerURL + (q ? '?q=' + encodeURIComponent(q) : '');
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + token },
+      cache: 'no-store'             // ← prevent browser/proxy caching
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderTable(data);
+  } catch (e) {
+    showToast(e.message, true);
   }
+}
+
 
   // BUILD TABLE & INLINE EDITING
   function renderTable(items) {
